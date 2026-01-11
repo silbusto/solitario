@@ -1,0 +1,2 @@
+# solitario
+juego de cartas
