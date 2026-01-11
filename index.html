@@ -1,0 +1,466 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Solitario Zen</title>
+    <!-- Efecto de celebración -->
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+    <style>
+        :root {
+            --bg-color: #35654d; /* Verde Paño Clásico */
+            --card-width: 13vw; /* Un poco más anchas */
+            --card-height: 19vw;
+            --card-max-w: 75px;
+            --card-max-h: 110px;
+            --spacing: 8px;
+        }
+
+        body {
+            background-color: var(--bg-color);
+            font-family: 'Segoe UI', system-ui, sans-serif;
+            margin: 0; padding: 10px;
+            display: flex; flex-direction: column; align-items: center;
+            height: 100vh; overflow: hidden; user-select: none;
+            color: white; touch-action: manipulation;
+        }
+
+        header { 
+            width: 100%; display: flex; justify-content: space-between; align-items: center; 
+            margin-bottom: 15px; max-width: 600px; height: 40px;
+        }
+        h1 { margin: 0; font-size: 1.2rem; font-weight: 600; text-shadow: 0 1px 2px rgba(0,0,0,0.3); }
+        
+        .header-buttons { display: flex; gap: 10px; }
+        
+        button {
+            background: rgba(255,255,255,0.25); border: 1px solid rgba(255,255,255,0.5);
+            color: white; padding: 6px 16px; border-radius: 20px; cursor: pointer;
+            font-weight: 500; font-size: 0.9rem; transition: background 0.2s;
+        }
+        button:hover { background: rgba(255,255,255,0.4); }
+        button:disabled { opacity: 0.5; cursor: default; }
+
+        /* TABLERO */
+        #game-board {
+            width: 100%; max-width: 600px;
+            display: grid; 
+            grid-template-columns: repeat(7, 1fr);
+            gap: 6px;
+            padding-bottom: 20px;
+        }
+
+        /* Zonas Superiores */
+        .top-row {
+            grid-column: 1 / -1;
+            display: flex; justify-content: space-between;
+            margin-bottom: 15px; height: var(--card-max-h);
+        }
+        .section-group { display: flex; gap: 8px; }
+
+        /* Espacios de cartas (Slots) */
+        .slot {
+            width: var(--card-width); height: var(--card-height);
+            max-width: var(--card-max-w); max-height: var(--card-max-h);
+            border: 2px solid rgba(255,255,255,0.15); border-radius: 8px;
+            position: relative; box-sizing: border-box;
+            display: flex; justify-content: center; align-items: center;
+        }
+        .slot-symbol { font-size: 2rem; opacity: 0.2; color: white; }
+        #stock { cursor: pointer; }
+
+        /* CARTAS */
+        .card {
+            width: var(--card-width); height: var(--card-height);
+            max-width: var(--card-max-w); max-height: var(--card-max-h);
+            background: white; border-radius: 8px;
+            color: black; position: absolute;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.25);
+            display: flex; flex-direction: column; justify-content: space-between;
+            padding: 4px; box-sizing: border-box;
+            font-weight: bold; font-size: 0.9rem;
+            cursor: pointer; transition: transform 0.1s;
+            z-index: 10;
+        }
+        
+        /* Colores */
+        .card.red { color: #dc2626; }
+        .card.black { color: #0f172a; }
+        
+        /* Dorso */
+        .card-back {
+            background: repeating-linear-gradient(135deg, #1e40af, #1e40af 10px, #3b82f6 10px, #3b82f6 20px);
+            border: 2px solid #fff;
+        }
+        
+        /* --- NÚMEROS MÁS GRANDES --- */
+        .card-corner { 
+            display: flex; flex-direction: column; align-items: center; 
+            line-height: 0.9; 
+            font-size: 1.1rem; /* Aumentado */
+            font-weight: 800;
+        }
+        .card-center { 
+            position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); 
+            font-size: 2.8rem; /* Símbolo central mucho más grande */
+        }
+        .rotated { transform: rotate(180deg); }
+
+        /* Apilamiento en columnas (Tableau) */
+        .tableau-col { 
+            position: relative; min-height: 300px; 
+            display: flex; flex-direction: column; align-items: center;
+        }
+
+        /* Icono de recargar mazo */
+        #refresh-icon { font-size: 2rem; opacity: 0.7; transition: transform 0.5s; color:white;}
+        
+        /* Mensaje de Victoria */
+        .win-msg {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.85); color: white;
+            display: flex; flex-direction: column; justify-content: center; align-items: center;
+            z-index: 100; display: none;
+        }
+        .win-msg h2 { font-size: 3rem; margin: 0 0 20px 0; color: #fbbf24; }
+    </style>
+</head>
+<body>
+
+    <header>
+        <h1>Solitario Zen</h1>
+        <div class="header-buttons">
+            <button id="undo-btn" onclick="undo()" disabled>Deshacer</button>
+            <button onclick="confirmRestart()">Reiniciar</button>
+        </div>
+    </header>
+
+    <div id="game-board">
+        <!-- Fila Superior -->
+        <div class="top-row">
+            <div class="section-group">
+                <!-- Mazo (Stock) -->
+                <div class="slot" id="stock" onclick="clickStock()">
+                    <div id="refresh-icon" style="display:none">↺</div>
+                </div>
+                <!-- Descarte (Waste) -->
+                <div class="slot" id="waste"></div>
+            </div>
+            
+            <!-- Fundaciones (Donde van los Ases) -->
+            <div class="section-group" style="justify-content: flex-end; flex-grow: 1;">
+                <div class="slot" id="f-0" data-suit="h"><span class="slot-symbol">♥</span></div>
+                <div class="slot" id="f-1" data-suit="d"><span class="slot-symbol">♦</span></div>
+                <div class="slot" id="f-2" data-suit="c"><span class="slot-symbol">♣</span></div>
+                <div class="slot" id="f-3" data-suit="s"><span class="slot-symbol">♠</span></div>
+            </div>
+        </div>
+
+        <!-- Columnas de juego (7) -->
+        <div class="tableau-col" id="t-0"></div>
+        <div class="tableau-col" id="t-1"></div>
+        <div class="tableau-col" id="t-2"></div>
+        <div class="tableau-col" id="t-3"></div>
+        <div class="tableau-col" id="t-4"></div>
+        <div class="tableau-col" id="t-5"></div>
+        <div class="tableau-col" id="t-6"></div>
+    </div>
+
+    <!-- Pantalla de Victoria -->
+    <div class="win-msg" id="win-msg" onclick="initGame()">
+        <h2>¡GANASTE!</h2>
+        <p>Toca la pantalla para jugar otra vez</p>
+    </div>
+
+    <script>
+        // --- CONFIGURACIÓN ---
+        const suits = ['h', 'd', 'c', 's']; 
+        const symbols = {'h': '♥', 'd': '♦', 'c': '♣', 's': '♠'};
+        const colors = {'h': 'red', 'd': 'red', 'c': 'black', 's': 'black'};
+        const values = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13];
+        const labels = {1: 'A', 11: 'J', 12: 'Q', 13: 'K'};
+
+        // --- ESTADO DEL JUEGO ---
+        let deck = [];
+        let piles = {
+            stock: [], 
+            waste: [],
+            f: [[], [], [], []], 
+            t: [[], [], [], [], [], [], []]
+        };
+        
+        // Historial para deshacer
+        let history = [];
+
+        // --- FUNCIONES BÁSICAS ---
+        function createDeck() {
+            deck = [];
+            for (let s of suits) {
+                for (let v of values) {
+                    deck.push({ suit: s, value: v, faceUp: false, color: colors[s] });
+                }
+            }
+        }
+
+        function shuffle() {
+            for (let i = deck.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [deck[i], deck[j]] = [deck[j], deck[i]];
+            }
+        }
+
+        function deal() {
+            piles = { stock: [], waste: [], f: [[],[],[],[]], t: [[],[],[],[],[],[],[]] };
+            history = []; // Reset historial
+            updateUndoBtn();
+            
+            for (let i = 0; i < 7; i++) {
+                for (let j = 0; j <= i; j++) {
+                    let card = deck.pop();
+                    if (j === i) card.faceUp = true; 
+                    piles.t[i].push(card);
+                }
+            }
+            piles.stock = deck;
+            render();
+        }
+
+        function initGame() {
+            document.getElementById('win-msg').style.display = 'none';
+            createDeck();
+            shuffle();
+            deal();
+        }
+
+        function confirmRestart() {
+            if(confirm('¿Reiniciar partida?')) initGame();
+        }
+        
+        // --- SISTEMA DE DESHACER ---
+        function saveState() {
+            // Guardamos una copia profunda del estado actual
+            history.push(JSON.stringify(piles));
+            // Limitamos a 10 pasos para no saturar memoria (usuario pidió 5)
+            if (history.length > 10) history.shift();
+            updateUndoBtn();
+        }
+
+        function undo() {
+            if (history.length === 0) return;
+            const previousState = history.pop();
+            piles = JSON.parse(previousState);
+            render();
+            updateUndoBtn();
+        }
+        
+        function updateUndoBtn() {
+            document.getElementById('undo-btn').disabled = (history.length === 0);
+        }
+
+        // --- LÓGICA DE JUEGO (SMART TOUCH) ---
+
+        function clickStock() {
+            saveState(); // Guardar antes de mover
+            if (piles.stock.length > 0) {
+                let card = piles.stock.pop();
+                card.faceUp = true;
+                piles.waste.push(card);
+            } else {
+                while(piles.waste.length > 0) {
+                    let c = piles.waste.pop();
+                    c.faceUp = false;
+                    piles.stock.push(c);
+                }
+            }
+            render();
+        }
+
+        function cardClick(pileType, pileIdx, cardIdx) {
+            let actualPile;
+            if(pileType === 'waste') actualPile = piles.waste;
+            else actualPile = piles[pileType][pileIdx];
+
+            if(!actualPile || actualPile.length === 0) return;
+
+            const card = actualPile[cardIdx];
+
+            if (!card.faceUp) {
+                if (cardIdx === actualPile.length - 1) {
+                    // Si revelamos carta oculta, NO guardamos estado aquí porque
+                    // es consecuencia automática, pero en este caso es un click manual
+                    // Si se permite click manual en carta oculta, lo guardamos.
+                    // Pero en lógica de movimiento, se revela automático.
+                    // Aquí es raro que usuario clickee, pero por si acaso:
+                    // (Normalmente no se puede clickear carta boca abajo salvo top)
+                    card.faceUp = true;
+                    render();
+                }
+                return;
+            }
+
+            // 1. INTENTAR MOVER A LAS BASES (FOUNDATIONS)
+            if (pileType !== 'f' && cardIdx === actualPile.length - 1) { 
+                for (let f = 0; f < 4; f++) {
+                    const fPile = piles.f[f];
+                    const topF = fPile.length > 0 ? fPile[fPile.length - 1] : null;
+                    
+                    let canMove = false;
+                    if (!topF && card.value === 1) canMove = true;
+                    else if (topF && topF.suit === card.suit && topF.value === card.value - 1) canMove = true;
+
+                    if (canMove) {
+                        moveCard(pileType, pileIdx, cardIdx, 'f', f);
+                        return; 
+                    }
+                }
+            }
+
+            // 2. INTENTAR MOVER A OTRA COLUMNA (TABLEAU)
+            for (let t = 0; t < 7; t++) {
+                if (pileType === 't' && t === pileIdx) continue; 
+
+                const tPile = piles.t[t];
+                const topT = tPile.length > 0 ? tPile[tPile.length - 1] : null;
+
+                let canMove = false;
+                if (!topT) {
+                    if (card.value === 13) canMove = true;
+                } else {
+                    if (topT.color !== card.color && topT.value === card.value + 1) canMove = true;
+                }
+
+                if (canMove) {
+                    moveCard(pileType, pileIdx, cardIdx, 't', t);
+                    return;
+                }
+            }
+        }
+
+        function moveCard(fromType, fromIdx, cardIdx, toType, toIdx) {
+            saveState(); // Guardar antes de mover
+
+            let sourcePile = (fromType === 'waste') ? piles.waste : piles[fromType][fromIdx];
+            let destPile = piles[toType][toIdx];
+
+            const movingCards = sourcePile.splice(cardIdx); 
+            destPile.push(...movingCards);
+
+            if (sourcePile.length > 0) {
+                sourcePile[sourcePile.length - 1].faceUp = true;
+            }
+
+            render();
+            checkWin();
+        }
+
+        function checkWin() {
+            // Condición 1: 52 cartas en las bases (Victoria total)
+            const totalFoundations = piles.f.reduce((acc, p) => acc + p.length, 0);
+            
+            // Condición 2: Todas las cartas del tablero están boca arriba Y el mazo está vacío
+            // Esto significa que ya no hay cartas ocultas ("ganaste" técnicamente)
+            const tableauAllFaceUp = piles.t.every(col => col.every(c => c.faceUp));
+            const stockEmpty = piles.stock.length === 0; // Mazo vacío (pueden estar en waste, pero waste siempre es faceUp)
+            
+            if (totalFoundations === 52 || (tableauAllFaceUp && stockEmpty)) {
+                confetti({ particleCount: 300, spread: 120, origin: { y: 0.6 } });
+                document.getElementById('win-msg').style.display = 'flex';
+            }
+        }
+
+        // --- RENDERIZADO VISUAL ---
+        function render() {
+            // STOCK
+            const stockEl = document.getElementById('stock');
+            const icon = document.getElementById('refresh-icon');
+            stockEl.innerHTML = ''; stockEl.appendChild(icon);
+            
+            if (piles.stock.length > 0) {
+                icon.style.display = 'none';
+                stockEl.appendChild(createCardHTML(null, false));
+            } else {
+                icon.style.display = 'block';
+            }
+
+            // WASTE
+            const wasteEl = document.getElementById('waste');
+            wasteEl.innerHTML = '';
+            if (piles.waste.length > 0) {
+                const c = piles.waste[piles.waste.length - 1];
+                const el = createCardHTML(c, true);
+                el.onclick = () => cardClick('waste', 0, piles.waste.length - 1);
+                wasteEl.appendChild(el);
+            }
+
+            // BASES (FOUNDATIONS)
+            piles.f.forEach((pile, i) => {
+                const el = document.getElementById(`f-${i}`);
+                const symbol = el.querySelector('.slot-symbol');
+                el.innerHTML = ''; el.appendChild(symbol);
+                
+                if (pile.length > 0) {
+                    const c = pile[pile.length - 1];
+                    const cardEl = createCardHTML(c, true);
+                    // HABILITAMOS EL CLICK EN LAS BASES PARA PODER BAJARLAS
+                    cardEl.onclick = () => cardClick('f', i, pile.length - 1);
+                    el.appendChild(cardEl);
+                }
+            });
+
+            // COLUMNAS (TABLEAU)
+            piles.t.forEach((pile, i) => {
+                const col = document.getElementById(`t-${i}`);
+                col.innerHTML = '';
+                
+                pile.forEach((c, index) => {
+                    const cardEl = createCardHTML(c, c.faceUp);
+                    cardEl.style.position = 'absolute';
+                    // Calcular offset visual
+                    let offset = 0;
+                    for(let k=0; k<index; k++) {
+                        offset += pile[k].faceUp ? 28 : 12; 
+                    }
+                    cardEl.style.top = `${offset}px`; 
+
+                    if (c.faceUp) {
+                        cardEl.onclick = (e) => {
+                            e.stopPropagation();
+                            cardClick('t', i, index);
+                        };
+                    }
+                    col.appendChild(cardEl);
+                });
+            });
+        }
+
+        function createCardHTML(card, faceUp) {
+            const div = document.createElement('div');
+            div.className = 'card';
+            
+            if (!faceUp) {
+                div.classList.add('card-back');
+                return div;
+            }
+
+            div.classList.add(card.color);
+            const valStr = labels[card.value] || card.value;
+            const suitStr = symbols[card.suit];
+
+            div.innerHTML = `
+                <div class="card-corner">
+                    <span>${valStr}</span>
+                    <span style="font-size: 0.8em">${suitStr}</span>
+                </div>
+                <div class="card-center">${suitStr}</div>
+                <div class="card-corner rotated" style="bottom:4px; right:4px">
+                    <span>${valStr}</span>
+                    <span style="font-size: 0.8em">${suitStr}</span>
+                </div>
+            `;
+            return div;
+        }
+
+        initGame();
+    </script>
+</body>
+</html>
