@@ -77,7 +77,8 @@
             color: black; position: absolute;
             box-shadow: 0 2px 4px rgba(0,0,0,0.25);
             display: flex; flex-direction: column; justify-content: space-between;
-            padding: 4px; box-sizing: border-box;
+            padding: 2px; /* Reducido un poco el padding */
+            box-sizing: border-box;
             font-weight: bold; font-size: 0.9rem;
             cursor: pointer; transition: transform 0.1s;
             z-index: 10;
@@ -93,17 +94,21 @@
             border: 2px solid #fff;
         }
         
-        /* --- NÚMEROS MÁS GRANDES --- */
+        /* --- ESTILOS DE CONTENIDO DE CARTA --- */
         .card-corner { 
             display: flex; flex-direction: column; align-items: center; 
-            line-height: 0.9; 
-            font-size: 1.1rem; /* Aumentado */
+            line-height: 0.85; 
+            font-size: 1rem; /* Ajustado para que no sea excesivo */
             font-weight: 800;
+            padding: 2px;
         }
+        
+        /* SÍMBOLO CENTRAL AJUSTADO */
         .card-center { 
             position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); 
-            font-size: 2.8rem; /* Símbolo central mucho más grande */
+            font-size: 1.8rem; /* Reducido para no tapar los números (era 2.8rem) */
         }
+        
         .rotated { transform: rotate(180deg); }
 
         /* Apilamiento en columnas (Tableau) */
@@ -189,7 +194,6 @@
             t: [[], [], [], [], [], [], []]
         };
         
-        // Historial para deshacer
         let history = [];
 
         // --- FUNCIONES BÁSICAS ---
@@ -211,7 +215,7 @@
 
         function deal() {
             piles = { stock: [], waste: [], f: [[],[],[],[]], t: [[],[],[],[],[],[],[]] };
-            history = []; // Reset historial
+            history = []; 
             updateUndoBtn();
             
             for (let i = 0; i < 7; i++) {
@@ -238,9 +242,7 @@
         
         // --- SISTEMA DE DESHACER ---
         function saveState() {
-            // Guardamos una copia profunda del estado actual
             history.push(JSON.stringify(piles));
-            // Limitamos a 10 pasos para no saturar memoria (usuario pidió 5)
             if (history.length > 10) history.shift();
             updateUndoBtn();
         }
@@ -257,10 +259,10 @@
             document.getElementById('undo-btn').disabled = (history.length === 0);
         }
 
-        // --- LÓGICA DE JUEGO (SMART TOUCH) ---
+        // --- LÓGICA DE JUEGO ---
 
         function clickStock() {
-            saveState(); // Guardar antes de mover
+            saveState(); 
             if (piles.stock.length > 0) {
                 let card = piles.stock.pop();
                 card.faceUp = true;
@@ -286,19 +288,13 @@
 
             if (!card.faceUp) {
                 if (cardIdx === actualPile.length - 1) {
-                    // Si revelamos carta oculta, NO guardamos estado aquí porque
-                    // es consecuencia automática, pero en este caso es un click manual
-                    // Si se permite click manual en carta oculta, lo guardamos.
-                    // Pero en lógica de movimiento, se revela automático.
-                    // Aquí es raro que usuario clickee, pero por si acaso:
-                    // (Normalmente no se puede clickear carta boca abajo salvo top)
                     card.faceUp = true;
                     render();
                 }
                 return;
             }
 
-            // 1. INTENTAR MOVER A LAS BASES (FOUNDATIONS)
+            // 1. INTENTAR MOVER A LAS BASES
             if (pileType !== 'f' && cardIdx === actualPile.length - 1) { 
                 for (let f = 0; f < 4; f++) {
                     const fPile = piles.f[f];
@@ -315,7 +311,7 @@
                 }
             }
 
-            // 2. INTENTAR MOVER A OTRA COLUMNA (TABLEAU)
+            // 2. INTENTAR MOVER A OTRA COLUMNA
             for (let t = 0; t < 7; t++) {
                 if (pileType === 't' && t === pileIdx) continue; 
 
@@ -337,7 +333,7 @@
         }
 
         function moveCard(fromType, fromIdx, cardIdx, toType, toIdx) {
-            saveState(); // Guardar antes de mover
+            saveState(); 
 
             let sourcePile = (fromType === 'waste') ? piles.waste : piles[fromType][fromIdx];
             let destPile = piles[toType][toIdx];
@@ -354,13 +350,9 @@
         }
 
         function checkWin() {
-            // Condición 1: 52 cartas en las bases (Victoria total)
             const totalFoundations = piles.f.reduce((acc, p) => acc + p.length, 0);
-            
-            // Condición 2: Todas las cartas del tablero están boca arriba Y el mazo está vacío
-            // Esto significa que ya no hay cartas ocultas ("ganaste" técnicamente)
             const tableauAllFaceUp = piles.t.every(col => col.every(c => c.faceUp));
-            const stockEmpty = piles.stock.length === 0; // Mazo vacío (pueden estar en waste, pero waste siempre es faceUp)
+            const stockEmpty = piles.stock.length === 0; 
             
             if (totalFoundations === 52 || (tableauAllFaceUp && stockEmpty)) {
                 confetti({ particleCount: 300, spread: 120, origin: { y: 0.6 } });
@@ -392,7 +384,7 @@
                 wasteEl.appendChild(el);
             }
 
-            // BASES (FOUNDATIONS)
+            // BASES
             piles.f.forEach((pile, i) => {
                 const el = document.getElementById(`f-${i}`);
                 const symbol = el.querySelector('.slot-symbol');
@@ -401,13 +393,12 @@
                 if (pile.length > 0) {
                     const c = pile[pile.length - 1];
                     const cardEl = createCardHTML(c, true);
-                    // HABILITAMOS EL CLICK EN LAS BASES PARA PODER BAJARLAS
                     cardEl.onclick = () => cardClick('f', i, pile.length - 1);
                     el.appendChild(cardEl);
                 }
             });
 
-            // COLUMNAS (TABLEAU)
+            // COLUMNAS
             piles.t.forEach((pile, i) => {
                 const col = document.getElementById(`t-${i}`);
                 col.innerHTML = '';
@@ -415,7 +406,6 @@
                 pile.forEach((c, index) => {
                     const cardEl = createCardHTML(c, c.faceUp);
                     cardEl.style.position = 'absolute';
-                    // Calcular offset visual
                     let offset = 0;
                     for(let k=0; k<index; k++) {
                         offset += pile[k].faceUp ? 28 : 12; 
